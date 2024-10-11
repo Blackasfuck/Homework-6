@@ -1,0 +1,196 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+
+public class ConfigurationManager
+{
+    private static ConfigurationManager _instance;
+    private static readonly object _lock = new object();
+    private Dictionary<string, string> _settings;
+
+    private ConfigurationManager()
+    {
+        _settings = new Dictionary<string, string>();
+        LoadSettings();
+    }
+
+    public static ConfigurationManager GetInstance()
+    {
+        if (_instance == null)
+        {
+            lock (_lock)
+            {
+                if (_instance == null)
+                {
+                    _instance = new ConfigurationManager();
+                }
+            }
+        }
+        return _instance;
+    }
+
+    private void LoadSettings()
+    {
+        try
+        {
+            if (File.Exists("config.txt"))
+            {
+                var lines = File.ReadAllLines("config.txt");
+                foreach (var line in lines)
+                {
+                    var parts = line.Split('=');
+                    if (parts.Length == 2)
+                    {
+                        _settings[parts[0]] = parts[1];
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Ошибка загрузки настроек: {ex.Message}");
+        }
+    }
+
+    public void SaveSettings()
+    {
+        try
+        {
+            using (var writer = new StreamWriter("config.txt"))
+            {
+                foreach (var kvp in _settings)
+                {
+                    writer.WriteLine($"{kvp.Key}={kvp.Value}");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Ошибка сохранения настроек: {ex.Message}");
+        }
+    }
+
+    public string GetSetting(string key) => _settings.ContainsKey(key) ? _settings[key] : null;
+
+    public void SetSetting(string key, string value) => _settings[key] = value;
+}
+
+public interface IReportBuilder
+{
+    void SetHeader(string header);
+    void SetContent(string content);
+    void SetFooter(string footer);
+    Report GetReport();
+}
+
+public class Report
+{
+    public string Header { get; set; }
+    public string Content { get; set; }
+    public string Footer { get; set; }
+
+    public override string ToString()
+    {
+        return $"{Header}\n{Content}\n{Footer}";
+    }
+}
+
+public class TextReportBuilder : IReportBuilder
+{
+    private Report _report = new Report();
+
+    public void SetHeader(string header) => _report.Header = header;
+    public void SetContent(string content) => _report.Content = content;
+    public void SetFooter(string footer) => _report.Footer = footer;
+
+    public Report GetReport() => _report;
+}
+
+public class HtmlReportBuilder : IReportBuilder
+{
+    private Report _report = new Report();
+
+    public void SetHeader(string header) => _report.Header = $"<h1>{header}</h1>";
+    public void SetContent(string content) => _report.Content = $"<p>{content}</p>";
+    public void SetFooter(string footer) => _report.Footer = $"<footer>{footer}</footer>";
+
+    public Report GetReport() => _report;
+}
+
+public class ReportDirector
+{
+    public void ConstructReport(IReportBuilder builder)
+    {
+        builder.SetHeader("Отчет");
+        builder.SetContent("Это содержимое отчета");
+        builder.SetFooter("Конец отчета");
+    }
+}
+
+public class Product : ICloneable
+{
+    public string Name { get; set; }
+    public decimal Price { get; set; }
+
+    public object Clone()
+    {
+        return new Product { Name = this.Name, Price = this.Price };
+    }
+}
+
+public class Order : ICloneable
+{
+    public List<Product> Products { get; set; } = new List<Product>();
+    public decimal DeliveryCost { get; set; }
+    public decimal Discount { get; set; }
+
+    public object Clone()
+    {
+        var clonedOrder = new Order
+        {
+            DeliveryCost = this.DeliveryCost,
+            Discount = this.Discount
+        };
+        clonedOrder.Products = this.Products.ConvertAll(p => (Product)p.Clone());
+        return clonedOrder;
+    }
+}
+
+class Program
+{
+    static void Main(string[] args)
+    {
+        var config1 = ConfigurationManager.GetInstance();
+        config1.SetSetting("Theme", "Dark");
+        config1.SaveSettings();
+
+        var config2 = ConfigurationManager.GetInstance();
+        Console.WriteLine(config2.GetSetting("Theme"));
+
+        var director = new ReportDirector();
+        IReportBuilder textBuilder = new TextReportBuilder();
+        director.ConstructReport(textBuilder);
+        var textReport = textBuilder.GetReport();
+        Console.WriteLine(textReport);
+
+        IReportBuilder htmlBuilder = new HtmlReportBuilder();
+        director.ConstructReport(htmlBuilder);
+        var htmlReport = htmlBuilder.GetReport();
+        Console.WriteLine(htmlReport);
+
+        var product1 = new Product { Name = "Товар 1", Price = 100m };
+        var product2 = new Product { Name = "Товар 2", Price = 200m };
+
+        var order1 = new Order();
+        order1.Products.Add(product1);
+        order1.Products.Add(product2);
+        order1.DeliveryCost = 50m;
+        order1.Discount = 10m;
+
+        var order2 = (Order)order1.Clone();
+        order2.Products[0].Name = "Клонированный товар 1";
+
+        Console.WriteLine($"Оригинальный заказ: {order1.Products[0].Name}, {order1.Products[1].Name}");
+        Console.WriteLine($"Клонированный заказ: {order2.Products[0].Name}, {order2.Products[1].Name}");
+    }
+}
